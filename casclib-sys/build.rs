@@ -13,7 +13,10 @@ fn main() {
     #[cfg(target_os = "windows")]
     {
       cfg.cxxflag("-D UNICODE")
-        .cxxflag("-D _UNICODE");
+        .cxxflag("-D _UNICODE")
+        .cxxflag("-D CASC_UNICODE")
+        .cxxflag("-D CASCLIB_UNICODE");        
+    
     }
 
     // Builds CascLib using cmake
