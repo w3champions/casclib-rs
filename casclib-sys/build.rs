@@ -12,17 +12,17 @@ fn main() {
 
     #[cfg(target_os = "windows")]
     {
-      cfg.cxxflag("-D UNICODE")
-        .cxxflag("-D _UNICODE")
-        .cxxflag("-D CASC_UNICODE")
-        .cxxflag("-D CASCLIB_UNICODE");        
-    
+        cfg.cxxflag("-D UNICODE")
+            .cxxflag("-D _UNICODE")
+            .cxxflag("-D CASC_UNICODE")
+            .cxxflag("-D CASCLIB_UNICODE");
     }
 
     // Builds CascLib using cmake
     let dst = cfg
         .define("CASC_BUILD_SHARED_LIB", "OFF")
         .define("CASC_BUILD_STATIC_LIB", "ON")
+        .define("CMAKE_POLICY_VERSION_MINIMUM", "3.5")
         .build();
 
     let lib = dst.join("lib");
