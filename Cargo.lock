@@ -39,7 +39,7 @@ checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
 
 [[package]]
 name = "casclib"
-version = "0.3.0"
+version = "0.2.1"
 dependencies = [
  "casclib-sys",
  "log",
@@ -48,7 +48,7 @@ dependencies = [
 
 [[package]]
 name = "casclib-bindgen"
-version = "0.3.0"
+version = "0.1.0"
 dependencies = [
  "bindgen",
 ]

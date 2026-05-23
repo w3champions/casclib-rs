@@ -8,7 +8,7 @@
   # Vendored CascLib C++ source tree. Override to point at a different
   # revision or a local checkout.
   casclibSrc ? callPackage ./casclib-src.nix { },
-  version ? "0.3.0",
+  version ? "0.2.1",
 }:
 
 let

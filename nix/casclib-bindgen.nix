@@ -8,7 +8,7 @@
   # tool reads XWIN_DIR at runtime when invoked with BINDGEN_TARGET_OS=windows
   # to drive clang against the Windows headers.
   xwinSdk ? callPackage ./xwin-sdk.nix { },
-  version ? "0.3.0",
+  version ? "0.1.0",
 }:
 
 let

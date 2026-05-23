@@ -17,7 +17,7 @@
   # falls back to network download and the sandbox kills the build. Keep
   # this in sync with the xwinSdk arg.
   xwinArch ? "x86_64",
-  version ? "0.3.0",
+  version ? "0.2.1",
 }:
 
 let
