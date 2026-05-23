@@ -23,6 +23,13 @@ fn main() {
         .define("CASC_BUILD_SHARED_LIB", "OFF")
         .define("CASC_BUILD_STATIC_LIB", "ON")
         .define("CMAKE_POLICY_VERSION_MINIMUM", "3.5")
+        // CascLib's CMakeLists pulls in GNUInstallDirs, which resolves
+        // CMAKE_INSTALL_LIBDIR to `lib64` on multiarch x86_64 systems. The
+        // cmake crate only adds `<install_prefix>/lib` to the rustc link
+        // search path, so the static archive becomes unreachable. Force the
+        // simple `lib` layout to keep the search path consistent across
+        // hosts.
+        .define("CMAKE_INSTALL_LIBDIR", "lib")
         .build();
 
     let lib = dst.join("lib");
