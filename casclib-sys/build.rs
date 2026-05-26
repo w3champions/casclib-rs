@@ -10,6 +10,21 @@ fn main() {
 
     let mut cfg = cmake::Config::new(&casclib_path);
 
+    // Rename CascLib's bundled OpenSSL AES symbols to avoid LNK2005 collisions
+    // when a downstream crate statically links openssl-sys (e.g. via `vendored`)
+    // alongside casclib-sys. CascLib's `deps/CascLib/src/overwatch/aes.cpp` is
+    // a copy of OpenSSL's AES implementation with identical exported symbols,
+    // so the MSVC linker rejects both archives. We use `-D` preprocessor
+    // defines so all translation units (aes.cpp, cmf.cpp, and the aes.h
+    // header) see the renamed identifiers without touching the vendored
+    // CascLib sources. The rename is harmless on macOS/Linux and keeps the
+    // build symmetric across targets.
+    cfg.cxxflag("-DAES_set_encrypt_key=CASC_AES_set_encrypt_key")
+        .cxxflag("-DAES_set_decrypt_key=CASC_AES_set_decrypt_key")
+        .cxxflag("-DAES_encrypt=CASC_AES_encrypt")
+        .cxxflag("-DAES_decrypt=CASC_AES_decrypt")
+        .cxxflag("-DAES_cbc_decrypt=CASC_AES_cbc_decrypt");
+
     // Gate on the *target* OS, not the host. A build script runs on the
     // host, so `#[cfg(target_os = ...)]` here would silently drop the
     // UNICODE defines when cross-compiling Linux → x86_64-pc-windows-msvc,
