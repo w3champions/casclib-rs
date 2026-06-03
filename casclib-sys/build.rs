@@ -25,6 +25,53 @@ fn main() {
         .cxxflag("-DAES_decrypt=CASC_AES_decrypt")
         .cxxflag("-DAES_cbc_decrypt=CASC_AES_cbc_decrypt");
 
+    // Compile CascLib's *bundled* zlib (`src/zlib/*.c`) into `libcasc`, with all
+    // zlib symbols renamed via zlib's own `Z_PREFIX` so they cannot collide with
+    // the app's other zlib (flate2 -> libz-sys). This is the single change that
+    // fixes the launcher's "casc: File not found" regression.
+    //
+    // Root cause: CascLib's CMakeLists links the host's system zlib whenever
+    // `find_package(ZLIB)` succeeds (`-DCASC_USE_SYSTEM_ZLIB`, `ZLIB::ZLIB`).
+    // On this build host `find_package` discovers PostgreSQL's `zlib.lib`
+    // (exposed via the `LIB` env var, version 1.3.1). That archive is built
+    // `/MD`; under the launcher's `+crt-static` (/MT) build, zlib's `inflate`
+    // does its internal allocations on the dynamic-CRT heap while CascLib drives
+    // it from the static-CRT heap. The cross-CRT state corrupts BLTE
+    // decompression and CascLib reports valid files as ERROR_FILE_NOT_FOUND
+    // ("casc: File not found") even though the storage and path are correct.
+    // This is exactly the "CASC regression under crt-static" symptom.
+    //
+    // Two naive fixes both fail:
+    //   - just disabling find_package -> CascLib compiles its bundled zlib, but
+    //     its public symbols (inflate/zutil's z_errmsg/zlibVersion/...) collide
+    //     with libz-sys's zlib at the final app link: LNK2005 multiply-defined.
+    //   - pointing find_package at libz-sys's archive -> Cargo does not reliably
+    //     export `DEP_Z_ROOT` to this build script, so the lookup is unstable.
+    //
+    // The robust fix: force the bundled-zlib branch AND define `Z_PREFIX`. zlib's
+    // `zconf.h` then macro-renames every public symbol to a `z_`-prefixed name
+    // (`inflate` -> `z_inflate`, etc.) consistently across the bundled zlib *and*
+    // CascDecompress.cpp's call sites. The result is a self-contained `/MT`
+    // CascLib whose zlib is private: one CRT (no decompression corruption) and no
+    // symbol collision with libz-sys (no LNK2005). Independent of the host's
+    // `LIB`/`PATH` and of any other crate's zlib.
+    cfg.define("CMAKE_DISABLE_FIND_PACKAGE_ZLIB", "ON");
+    // Make the bundled zlib's symbols private so they cannot collide with the
+    // app's other zlib (flate2 -> libz-sys) at the final link (LNK2005).
+    //
+    // `Z_PREFIX` is zlib's own mechanism for exactly this: `zconf.h` macro-renames
+    // the entire public + internal API to `z_`-prefixed names (inflate -> z_inflate,
+    // inflate_copyright -> z_inflate_copyright, zcalloc -> z_zcalloc, ...), applied
+    // consistently to the bundled zlib C sources AND CascDecompress.cpp's call
+    // sites (both compiled with this flag). The one symbol it does NOT cover is the
+    // `z_errmsg` error-table global (already `z_`-prefixed in vanilla zlib), so we
+    // rename that one explicitly. Together these make CascLib's zlib fully private.
+    let zdefs = ["-DZ_PREFIX", "-Dz_errmsg=casc_z_errmsg"];
+    for d in zdefs {
+        cfg.cflag(d);
+        cfg.cxxflag(d);
+    }
+
     // Gate on the *target* OS, not the host. A build script runs on the
     // host, so `#[cfg(target_os = ...)]` here would silently drop the
     // UNICODE defines when cross-compiling Linux → x86_64-pc-windows-msvc,
