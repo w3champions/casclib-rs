@@ -1,6 +1,7 @@
 extern crate cmake;
 
 use std::env;
+use std::path::Path;
 
 fn main() {
     // Gets CacsLib source path from env CASCLIB_DIR
@@ -35,6 +36,21 @@ fn main() {
             .cxxflag("-D _UNICODE")
             .cxxflag("-D CASC_UNICODE")
             .cxxflag("-D CASCLIB_UNICODE");
+
+        // CascLib compiles its bundled zlib 1.2.11 on Windows, under zlib's own
+        // symbol names. MSVC binds a reference to whichever static library on
+        // the link line defines the name first, so once a downstream crate
+        // also links libz-sys (or StormLib, with its own zlib 1.2.5),
+        // CascLib's `inflate*` calls can land in that copy instead. libz-sys
+        // built without its `libc` feature defines Z_SOLO, which has no default
+        // allocator, and CascLib inflates with `zalloc = NULL`: `inflateInit`
+        // fails and CascOpenStorage reports ERROR_FILE_NOT_FOUND. Always build
+        // the bundled copy (never a zlib CMake happens to find on the host) and
+        // give every one of its symbols a `casc_` prefix.
+        cfg.define("CMAKE_DISABLE_FIND_PACKAGE_ZLIB", "ON");
+        for flag in zlib_rename_flags(&Path::new(&casclib_path).join("src/zlib/zconf.h"), "casc") {
+            cfg.cflag(&flag).cxxflag(&flag);
+        }
 
         // Match Rust's +crt-static (the default for cargo-xwin builds): the
         // C/C++ objects must use the static CRT (/MT), or the final link
@@ -74,4 +90,43 @@ fn main() {
         println!("cargo:rustc-link-lib=stdc++");
         println!("cargo:rustc-link-lib=z");
     }
+}
+
+/// `-D<name>=<prefix>_<name>` for every symbol zlib's own `Z_PREFIX` block in
+/// `zconf.h` renames (the API plus internals such as `inflate_fast`, `zcalloc`
+/// and `_tr_*`), and for `z_errmsg`, which that block leaves alone. Z_PREFIX
+/// itself is not used because it hard-codes the `z_` prefix, and two bundled
+/// copies prefixed alike collide with each other. `gz*` is skipped: those
+/// sources are not compiled, and zlib.h redefines some of them as
+/// function-like macros.
+fn zlib_rename_flags(zconf: &Path, prefix: &str) -> Vec<String> {
+    let text = std::fs::read_to_string(zconf)
+        .unwrap_or_else(|e| panic!("failed to read {}: {}", zconf.display(), e));
+    let mut names: Vec<&str> = text
+        .lines()
+        .filter_map(|line| {
+            let mut words = line.trim_start().strip_prefix('#')?.split_whitespace();
+            match (words.next(), words.next(), words.next(), words.next()) {
+                (Some("define"), Some(name), Some(value), None)
+                    if value.strip_prefix("z_") == Some(name) =>
+                {
+                    Some(name)
+                }
+                _ => None,
+            }
+        })
+        .filter(|name| !name.starts_with("gz"))
+        .collect();
+    assert!(
+        names.contains(&"inflate") && names.contains(&"inflate_fast"),
+        "unexpected Z_PREFIX list in {}",
+        zconf.display()
+    );
+    names.push("z_errmsg");
+    names.sort_unstable();
+    names.dedup();
+    names
+        .into_iter()
+        .map(|name| format!("-D{}={}_{}", name, prefix, name))
+        .collect()
 }
